@@ -1,0 +1,342 @@
+package org.example.lab2;
+
+import org.example.lab1.Alphabet;
+import org.example.lab1.Cesar;
+import org.example.lab1.FrequencyChart;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Scanner;
+
+public class Lab2 {
+    public String encryptedMessage = "ZJYGIGYMNCCACCOXMBLVSWZSZJYGISFVGWHGYIRAUUKWAFRJVPLTSVEKOXCGYIRKCENSRKSFKMLDWSPSUWLCCSILCGYIRKIYKMMSHRCCYGIJZPLDCFVCOMKVCPHSJRESFJWREHSOVBNMLDGUFACGBPVVNXCEPSUJKRCPBWWAXQOJSBMIRATNKVAYSQPFEXOYCWYGIVEWTWOQFJFWSYZRGUCATIRFSQFXHWFFDMGZHRMINKSPIITDMEVNOAQRSCCGBGIESLWSRRIFRVMMDMOYZWCGACRWSACARXESBQRPTJIVJXIUOAULAKHUVMNLSEVWTKCSFXHWFFZRMABQKLEFWEIISHSPKMVWCSNLELVRIXHSHCVVSGBXESWKOYFXOXDRFTLWKUVVENSEKLALDRIWOFABMISZSBIWHWKVCPIEARUMALSYPQACSSIMEFRFRRDOVREXHSHCVVSGBSRGEKOGIEGWRLKLEJSJZPLTSCCINLMBWTEGDYVAHGKVCPCGARKSHWZC";
+
+    public static void main(String[] args) {
+        Lab2 lab2 = new Lab2();
+        Scanner scanner = new Scanner(System.in);
+        Hardcoding hardcoding = new Hardcoding();
+        Alphabet alphabet = new Alphabet();
+        alphabet.creatingEngAlphabet();
+        FrequencyChart frequencyChart = new FrequencyChart();
+        Cesar cesar = new Cesar();
+
+        ArrayList<String> enAlp = alphabet.creatingEngAlphabet();
+
+        Wigener wigenerik = new Wigener();
+        System.out.println(lab2.encryptedMessage);
+        HashMap<String, Integer>[] frequency = hardcoding.frequency(lab2.encryptedMessage);
+        double[] alpFrequency = alphabet.getEngAlphFrequency();
+        frequencyChart.displayFrequencyChart(alpFrequency, enAlp, "Частота символів алфавіту (Англійська)");
+        ArrayList<Integer> shifts = new ArrayList<>();
+        ArrayList<String> variants = new ArrayList<>();
+        for (int i = 0; i < frequency.length; i++) {
+            double[] alphFrequency = hardcoding.calculateLetterFrequency(new HashMap[]{frequency[i]}, enAlp);
+            double[] updatedFrequency = frequencyChart.addMissingLetters(alphFrequency, enAlp);
+            shifts.add(hardcoding.findBestShift(alpFrequency, updatedFrequency));
+
+            // Знаходимо найкращий зсув для поточної колонки
+            char bestShift = ColumnShiftFinder.findBestShift(alphFrequency, alpFrequency);
+
+            // Виводимо результат для поточної колонки
+            frequencyChart.displayFrequencyChart(updatedFrequency, enAlp, "Частота символів алфавіту (Колонка " + (i + 1) + ", Найкращий зсув: " + enAlp.indexOf(String.valueOf(bestShift).toUpperCase()) + ")");
+            variants.add(String.valueOf(bestShift));
+        }
+
+        String keyword = "";
+        for (int i = 0; i < shifts.size(); i++) {
+            keyword += cesar.decrypt(shifts.get(i), variants.get(i), enAlp);
+        }
+
+        System.out.println("Ключове слово: " + keyword.toUpperCase());
+        String decryptedMessage = wigenerik.decrypt(enAlp, lab2.encryptedMessage, keyword.toUpperCase());
+        System.out.println(decryptedMessage);
+        scanner.close();
+    }
+}
+
+
+package org.example.lab2;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class Hardcoding {
+    public static int finding(String encryptedMessage) {
+        Scanner scanner = new Scanner(System.in);
+        HashMap<String, Integer> wordOccurrences = new HashMap<>();
+        boolean check = true;
+        int choice;
+
+        while (check) {
+            System.out.print("Введіть кількість символів для пошуку: ");
+            choice = scanner.nextInt();
+            scanner.nextLine();
+
+            String regex = "\\w{" + choice + "}";
+            Pattern pattern = Pattern.compile(regex);
+            Matcher matcher = pattern.matcher(encryptedMessage);
+
+            while (matcher.find()) {
+                String sequence = matcher.group();
+                wordOccurrences.put(sequence, wordOccurrences.getOrDefault(sequence, 0) + 1);
+            }
+
+            System.out.println("Результати пошуку для " + choice + "-символьних послідовностей:");
+            for (String word : wordOccurrences.keySet()) {
+                int count = wordOccurrences.get(word);
+                if (count > 1) {
+                    System.out.println(word + ": " + count);
+                }
+            }
+
+            wordOccurrences.clear();
+
+            System.out.println("Продовжити введення? (так/ні)");
+            String continueInput = scanner.nextLine();
+            if (!continueInput.equalsIgnoreCase("так")) {
+                check = false;
+            }
+        }
+
+        System.out.print("Введіть остаточний вибір: ");
+        choice = scanner.nextInt();
+        return choice;
+    }
+
+
+    public ArrayList<String> nextStep(int choice, String encryptedMessage) {
+        ArrayList<String> capacity = new ArrayList<>();
+        String str = "";
+        for (char c : encryptedMessage.toCharArray()) {
+            if (str.length() < choice) {
+                str += String.valueOf(c);
+            } else {
+                capacity.add(str);
+                str = String.valueOf(c);
+            }
+        }
+        // Add the remaining string if any
+        if (!str.isEmpty()) {
+            capacity.add(str);
+        }
+
+        for (String string : capacity) {
+            System.out.println(string);
+        }
+        return capacity;
+    }
+
+    public int findBestShift(double[] columnFrequencies, double[] englishAlphabetFrequencies) {
+        // Ініціалізуємо масив для зберігання сум абсолютних різниць для кожного зсуву
+        double[] shiftDifferences = new double[26];
+
+        // Для кожного можливого зсуву
+        for (int shift = 0; shift < 26; shift++) {
+            double differenceSum = 0.0;
+            // Порівнюємо частоти символів у поточному стовпці з частотами в англійському алфавіті
+            for (int i = 0; i < 26; i++) {
+                int shiftedIndex = (i + shift) % 26; // Визначаємо індекс символу з урахуванням зсуву
+                differenceSum += Math.abs(columnFrequencies[shiftedIndex] - englishAlphabetFrequencies[i]);
+            }
+            // Зберігаємо суму абсолютних різниць для поточного зсуву
+            shiftDifferences[shift] = differenceSum;
+        }
+
+        // Знаходимо індекс мінімального елемента у масиві різниць
+        int bestShift = 0;
+        double minDifference = shiftDifferences[0];
+        for (int i = 1; i < shiftDifferences.length; i++) {
+            if (shiftDifferences[i] < minDifference) {
+                minDifference = shiftDifferences[i];
+                bestShift = i;
+            }
+        }
+
+        return bestShift;
+    }
+
+    public HashMap<String, Integer>[] frequency(String encryptedMessage) {
+        ArrayList<String> table = nextStep(finding(encryptedMessage), encryptedMessage);
+        int columnCount = table.get(0).length(); // Assuming all rows have the same length
+        HashMap<String, Integer>[] columns = new HashMap[columnCount];
+
+        // Initialize HashMap for each column
+        for (int i = 0; i < columnCount; i++) {
+            columns[i] = new HashMap<>();
+        }
+
+        // Count the frequency of characters in each column
+        for (String row : table) {
+            for (int i = 0; i < row.length(); i++) {
+                String character = String.valueOf(row.charAt(i)); // Convert char to string
+                columns[i].put(character, columns[i].getOrDefault(character, 0) + 1);
+            }
+        }
+
+        // Print the frequency of characters for each column
+
+        for (int i = 0; i < columnCount; i++) {
+            System.out.println("Стовпець " + (i + 1) + ":");
+            for (String key : columns[i].keySet()) {
+                System.out.println("Літера: " + key + ", Кількість випадінь: " + columns[i].get(key));
+            }
+            System.out.println();
+        }
+        return columns;
+    }
+
+    public double[] calculateLetterFrequency(HashMap<String, Integer>[] columns, ArrayList<String> alphabet) {
+        double[] letterFrequency = new double[26];
+        int totalLetters = 0;
+
+        // Обчислення загальної кількості літер у всіх стовпцях
+        for (HashMap<String, Integer> column : columns) {
+            for (int count : column.values()) {
+                totalLetters += count;
+            }
+        }
+
+        // Обчислення частоти кожної літери
+        for (int i = 0; i < 26; i++) {
+            String letter = alphabet.get(i);
+            int letterCount = 0;
+            for (HashMap<String, Integer> column : columns) {
+                letterCount += column.getOrDefault(letter, 0); // Використовуємо саме літеру з алфавіту
+            }
+            letterFrequency[i] = (double) letterCount / totalLetters;
+        }
+
+        return letterFrequency;
+    }
+}
+
+
+
+package org.example.lab1;
+
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.data.category.DefaultCategoryDataset;
+
+import javax.swing.*;
+import java.util.ArrayList;
+
+
+public class FrequencyChart {
+
+    public void displayFrequencyChart(double[] frequency, ArrayList<String> alphabet, String title) {
+        // Оновлення частоти з включенням невикористаних літер
+        double[] updatedFrequency = addMissingLetters(frequency, alphabet);
+
+        DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+
+        // Додавання частоти кожної літери в датасет
+        for (int i = 0; i < alphabet.size(); i++) {
+            String letter = alphabet.get(i);
+            dataset.addValue(updatedFrequency[i], "Крипто Аналіз", letter);
+        }
+
+        // Створення графіка з заголовком
+        JFreeChart barChart = ChartFactory.createBarChart(
+                title, // Заголовок графіка
+                "символи алфавіту",            // Вісь X
+                "частота",         // Вісь Y
+                dataset
+        );
+
+        // Відображення графіка у вікні
+        ChartPanel chartPanel = new ChartPanel(barChart);
+        JFrame frame = new JFrame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.add(chartPanel);
+        frame.pack();
+        frame.setVisible(true);
+    }
+
+    public double[] addMissingLetters(double[] frequencies, ArrayList<String> alphabet) {
+        double[] updatedFrequencies = new double[alphabet.size()];
+
+        // Заповнення масиву нульовими значеннями
+        for (int i = 0; i < alphabet.size(); i++) {
+            updatedFrequencies[i] = 0.0;
+        }
+
+        // Оновлення значень для літер, які мають відомі частоти
+        for (int i = 0; i < alphabet.size(); i++) {
+            String letter = alphabet.get(i);
+            for (int j = 0; j < frequencies.length; j++) {
+                if (letter.equalsIgnoreCase(alphabet.get(j))) {
+                    updatedFrequencies[i] = frequencies[j];
+                    break;
+                }
+            }
+        }
+
+        return updatedFrequencies;
+    }
+
+}
+
+
+package org.example.lab2;
+
+import java.util.Arrays;
+
+public class ColumnShiftFinder {
+
+    public static char findBestShift(double[] columnFrequency, double[] alphabetFrequency) {
+        // Визначення найкращого зсуву для колонки
+        double minDifference = Double.MAX_VALUE;
+        char bestShift = 'a'; // За замовчуванням вважаємо зсув 'a'
+
+        for (char shift = 'a'; shift <= 'z'; shift++) {
+            double difference = 0.0;
+
+            // Обчислення різниці між частотами колонки та загальним алфавітом
+            for (int i = 0; i < columnFrequency.length; i++) {
+                int shiftedIndex = (i + (shift - 'a')) % 26; // Визначаємо індекс з урахуванням зсуву
+                difference += Math.abs(columnFrequency[shiftedIndex] - alphabetFrequency[i]);
+            }
+
+            // Перевірка, чи знайдений зсув є кращим за попередній
+            if (difference < minDifference) {
+                minDifference = difference;
+                bestShift = shift;
+            }
+        }
+
+        return bestShift;
+    }
+}
+
+
+
+
+
+public static double friedmanTest(double[] observedFrequencies, double[] expectedFrequencies) {
+        double sumSquaredDiff = 0.0;
+        double totalObserved = 0.0;
+        double totalExpected = 0.0;
+
+        // Розрахунок загальної кількості спостережень та очікуваних значень
+        for (int i = 0; i < observedFrequencies.length; i++) {
+            totalObserved += observedFrequencies[i];
+            totalExpected += expectedFrequencies[i];
+        }
+
+        // Розрахунок відносних частот та різниць між спостережуваними та очікуваними значеннями
+        for (int i = 0; i < observedFrequencies.length; i++) {
+            double observedFreq = observedFrequencies[i] / totalObserved;
+            double expectedFreq = expectedFrequencies[i] / totalExpected;
+            sumSquaredDiff += Math.pow(observedFreq - expectedFreq, 2);
+        }
+
+        // Розрахунок індексу відповідності Фрідмана
+        double friedmanIndex = sumSquaredDiff / totalExpected;
+
+        return friedmanIndex;
+    }
